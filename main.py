@@ -3,6 +3,7 @@ import os
 import time
 import read_PWM
 import queue
+import sys
 from threading import Thread
 
 try:
@@ -18,6 +19,10 @@ except Exception as e:
 
 import pigpio
 import can
+
+####################################################################################################################################################
+non_secured = sys.argv[1]  #flag for bypassing security initialization (for non-secured controller)
+####################################################################################################################################################
 
 bus = can.interface.Bus(channel='can0', bustype='socketcan_native')
 current_milli_time = lambda: int(round(time.time() * 1000)) #time is in milliseconds
@@ -233,12 +238,22 @@ while True:
     current_time = current_milli_time()
 
     #main CAN message case
-    if duty !=0 and prev_duty == 0: #and not secure_conn:  # Command was zero, now non-zero, so send controller initilization messages.
-        sec_success = False
-        while not sec_success:
-            sec_success = security_access()
-            flush_queue()
+    if duty !=0 and prev_duty == 0: #Command was zero, now non-zero, so send controller initilization messages.
+        if non_secured:
+            #non-secured initialization
+            send_CAN([0x04, 0x2F, 0xDB, 0x06, 0x00, 0x55, 0x55, 0x55])
             time.sleep(0.01)
+            send_CAN([0x02, 0x10, 0x03, 0x55, 0x55, 0x55, 0x55, 0x55])
+            time.sleep(0.01)
+            send_CAN([0x03, 0x22, 0xF1, 0x00, 0x55, 0x55, 0x55, 0x55])
+            time.sleep(0.01)
+        else:
+            #security initialization
+            sec_success = False
+            while not sec_success:
+                sec_success = security_access()
+                flush_queue()
+                time.sleep(0.01)
 
     if duty != 0 or zero_command or zero_counter > 0:  #Non-zero command, so send CAN message.
         if (current_time - prev_time_1) > 1000:  #This message needs to be sent every second.
